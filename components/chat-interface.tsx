@@ -13,28 +13,13 @@ interface Message {
   role: "assistant" | "user"
   content: string
   timestamp: string
-  files?: FileAttachment[]
-}
-
-interface FileAttachment {
-  name: string
-  type: string
-  content: string
 }
 
 interface ChatInterfaceProps {
   pipelineData?: DashboardData
 }
 
-const WELCOME_MESSAGE = `¡Hola Alan! 👋 Soy tu Coach de Ventas B2B.
-
-Estoy aquí para ayudarte a:
-- Analizar tu pipeline y priorizar deals
-- Preparar estrategias para tus llamadas
-- Identificar riesgos y oportunidades
-- Darte coaching personalizado
-
-¿En qué puedo ayudarte hoy?`
+const WELCOME_MESSAGE = `Hola Alan, soy tu Coach de Ventas B2B. Estoy aqui para ayudarte a cerrar mas deals, analizar tu pipeline y optimizar tu estrategia. En que puedo ayudarte hoy?`
 
 export function ChatInterface({ pipelineData }: ChatInterfaceProps) {
   const [messages, setMessages] = useState<Message[]>([
@@ -47,10 +32,8 @@ export function ChatInterface({ pipelineData }: ChatInterfaceProps) {
   ])
   const [input, setInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
-  const [attachedFiles, setAttachedFiles] = useState<FileAttachment[]>([])
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     const savedHistory = localStorage.getItem("profitops-chat-history")
@@ -81,27 +64,17 @@ export function ChatInterface({ pipelineData }: ChatInterfaceProps) {
   }, [messages])
 
   const handleSend = async () => {
-    if (!input.trim() && attachedFiles.length === 0) return
-
-    let messageContent = input.trim()
-    if (attachedFiles.length > 0) {
-      const fileNames = attachedFiles.map(f => f.name).join(", ")
-      messageContent = messageContent 
-        ? `${messageContent}\n\n[Archivos adjuntos: ${fileNames}]`
-        : `[Archivos adjuntos: ${fileNames}]`
-    }
+    if (!input.trim()) return
 
     const userMessage: Message = {
       id: Date.now().toString(),
       role: "user",
-      content: messageContent,
+      content: input.trim(),
       timestamp: new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
-      files: attachedFiles.length > 0 ? [...attachedFiles] : undefined,
     }
 
     setMessages((prev) => [...prev, userMessage])
     setInput("")
-    setAttachedFiles([])
     setIsTyping(true)
 
     try {
@@ -112,30 +85,21 @@ export function ChatInterface({ pipelineData }: ChatInterfaceProps) {
 
       let systemPrompt = SYSTEM_PROMPT_BASE
       if (pipelineData) {
-        systemPrompt += `\n\n=== DATOS ACTUALES DEL PIPELINE ===
-Pipeline Total: $${pipelineData.pipeline_generado_imr?.toLocaleString() || 0} MXN
-Deals Abiertos: ${pipelineData.deals_abiertos || 0}
-Cierres Esta Semana: ${pipelineData.cierres_esta_semana || 0}
-Ganado Este Mes: $${pipelineData.ganado_imr_mes?.toLocaleString() || 0} / $${pipelineData.objetivo_imr?.toLocaleString() || 105000} MXN
-
-Deals en Acción Inmediata:
-${pipelineData.accion_inmediata?.slice(0, 5).map(d => 
-  `- ${d.deal_title} (${d.org_name}) - $${d.value_imr?.toLocaleString()} - Estado: ${d.estado} - ${d.estado_mensaje}`
-).join('\n') || 'No hay datos disponibles'}`
-      }
-
-      let fullMessage = messageContent
-      if (attachedFiles.length > 0) {
-        const fileContents = attachedFiles
-          .filter(f => f.type.startsWith('text/') || f.type === 'application/json')
-          .map(f => `\n--- Contenido de ${f.name} ---\n${f.content}`)
-          .join('\n')
-        if (fileContents) {
-          fullMessage += fileContents
+        systemPrompt += "\n\n=== DATOS ACTUALES DEL PIPELINE ===\n"
+        systemPrompt += "Pipeline Total: $" + (pipelineData.pipeline_generado_imr || 0).toLocaleString() + " MXN\n"
+        systemPrompt += "Deals Abiertos: " + (pipelineData.deals_abiertos || 0) + "\n"
+        systemPrompt += "Cierres Esta Semana: " + (pipelineData.cierres_esta_semana || 0) + "\n"
+        systemPrompt += "Ganado Este Mes: $" + (pipelineData.ganado_imr_mes || 0).toLocaleString() + " / $" + (pipelineData.objetivo_imr || 105000).toLocaleString() + " MXN\n"
+        
+        if (pipelineData.accion_inmediata && pipelineData.accion_inmediata.length > 0) {
+          systemPrompt += "\nDeals en Accion Inmediata:\n"
+          pipelineData.accion_inmediata.slice(0, 5).forEach(d => {
+            systemPrompt += "- " + d.deal_title + " (" + d.org_name + ") - $" + (d.value_imr || 0).toLocaleString() + " - Estado: " + d.estado + " - " + d.estado_mensaje + "\n"
+          })
         }
       }
 
-      const response = await sendChatMessage(fullMessage, history, systemPrompt, pipelineData)
+      const response = await sendChatMessage(input.trim(), history, systemPrompt, pipelineData)
 
       const assistantMessage: Message = {
         id: (Date.now() + 1).toString(),
@@ -163,43 +127,6 @@ ${pipelineData.accion_inmediata?.slice(0, 5).map(d =>
     textareaRef.current?.focus()
   }
 
-  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files
-    if (!files) return
-
-    for (const file of Array.from(files)) {
-      const reader = new FileReader()
-      
-      if (file.type.startsWith('image/')) {
-        reader.onload = () => {
-          setAttachedFiles(prev => [...prev, {
-            name: file.name,
-            type: file.type,
-            content: reader.result as string,
-          }])
-        }
-        reader.readAsDataURL(file)
-      } else {
-        reader.onload = () => {
-          setAttachedFiles(prev => [...prev, {
-            name: file.name,
-            type: file.type,
-            content: reader.result as string,
-          }])
-        }
-        reader.readAsText(file)
-      }
-    }
-    
-    if (fileInputRef.current) {
-      fileInputRef.current.value = ""
-    }
-  }
-
-  const removeFile = (index: number) => {
-    setAttachedFiles(prev => prev.filter((_, i) => i !== index))
-  }
-
   const handleNewConversation = () => {
     setMessages([
       {
@@ -214,15 +141,15 @@ ${pipelineData.accion_inmediata?.slice(0, 5).map(d =>
 
   const handleDownload = (format: "markdown" | "pdf") => {
     const content = messages
-      .map(m => `**${m.role === 'assistant' ? 'Coach' : 'Alan'}** (${m.timestamp}):\n${m.content}`)
-      .join('\n\n---\n\n')
+      .map(m => "**" + (m.role === "assistant" ? "Coach" : "Alan") + "** (" + m.timestamp + "):\n" + m.content)
+      .join("\n\n---\n\n")
 
     if (format === "markdown") {
-      const blob = new Blob([`# Conversación ProfitOps Coach\n\n${content}`], { type: "text/markdown" })
+      const blob = new Blob(["# Conversacion ProfitOps Coach\n\n" + content], { type: "text/markdown" })
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
-      a.download = `profitops-chat-${new Date().toISOString().split('T')[0]}.md`
+      a.download = "profitops-chat-" + new Date().toISOString().split("T")[0] + ".md"
       a.click()
       URL.revokeObjectURL(url)
     }
@@ -233,3 +160,108 @@ ${pipelineData.accion_inmediata?.slice(0, 5).map(d =>
       <div className="border-b border-border p-4">
         <div className="flex items-start justify-between">
           <div className="flex items-start gap-3">
+            <div className="rounded-lg bg-primary/10 p-2">
+              <Target className="h-6 w-6 text-primary" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-foreground">Coach de Ventas B2B</h2>
+              <p className="text-sm text-muted-foreground">Asistente inteligente para optimizar tus ventas</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse" />
+            <span className="text-sm text-muted-foreground">Activo</span>
+          </div>
+        </div>
+        <div className="mt-4 flex gap-2">
+          <Button variant="outline" size="sm" onClick={handleNewConversation}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nueva conversacion
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm">
+                <Download className="mr-2 h-4 w-4" />
+                Descargar
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent>
+              <DropdownMenuItem onClick={() => handleDownload("markdown")}>
+                Descargar como Markdown
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4">
+        <div className="space-y-4">
+          {messages.map((message) => (
+            <div key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+              <div className={`max-w-[80%] space-y-1 ${message.role === "user" ? "items-end" : "items-start"}`}>
+                <div className={`rounded-2xl p-4 ${message.role === "user" ? "bg-gradient-to-br from-primary to-primary/80 text-primary-foreground" : "border border-border bg-muted/50"}`}>
+                  <p className={`text-sm leading-relaxed whitespace-pre-wrap ${message.role === "user" ? "text-primary-foreground" : "text-foreground"}`}>
+                    {message.content}
+                  </p>
+                </div>
+                <p className="px-2 text-xs text-muted-foreground">{message.timestamp}</p>
+              </div>
+            </div>
+          ))}
+          {isTyping && (
+            <div className="flex justify-start">
+              <div className="max-w-[80%] space-y-1">
+                <div className="rounded-2xl border border-border bg-muted/50 p-4">
+                  <div className="flex gap-1">
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" style={{ animationDelay: "-0.3s" }} />
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" style={{ animationDelay: "-0.15s" }} />
+                    <div className="h-2 w-2 animate-bounce rounded-full bg-muted-foreground" />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      </div>
+
+      <div className="border-t border-border p-4">
+        <div className="mb-3 flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" className="rounded-full bg-transparent" onClick={() => handleQuickAction("Analiza las alertas de mi pipeline y dime que deals necesitan atencion urgente")}>
+            Analizar alertas
+          </Button>
+          <Button variant="outline" size="sm" className="rounded-full bg-transparent" onClick={() => handleQuickAction("Crea un plan de accion para esta semana basado en mis deals prioritarios")}>
+            Plan semanal
+          </Button>
+          <Button variant="outline" size="sm" className="rounded-full bg-transparent" onClick={() => handleQuickAction("Que deals tengo mas cerca de cerrar y que debo hacer para avanzarlos?")}>
+            Deals a cerrar
+          </Button>
+        </div>
+        <div className="flex gap-2">
+          <Textarea
+            ref={textareaRef}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault()
+                handleSend()
+              }
+            }}
+            placeholder="Escribe tu mensaje..."
+            className="min-h-[60px] resize-none"
+            disabled={isTyping}
+          />
+          <Button
+            onClick={handleSend}
+            size="icon"
+            className="shrink-0 bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary/70"
+            disabled={isTyping || !input.trim()}
+          >
+            <Send className="h-5 w-5" />
+          </Button>
+        </div>
+      </div>
+    </Card>
+  )
+}
