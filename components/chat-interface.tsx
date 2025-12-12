@@ -42,6 +42,51 @@ export function ChatInterface({ pipelineData }: ChatInterfaceProps) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages])
 
+  const buildSystemPrompt = () => {
+    let prompt = SYSTEM_PROMPT_BASE
+    
+    if (pipelineData) {
+      prompt += "\n\n=== DATOS ACTUALES DEL PIPELINE ==="
+      prompt += "\nFecha de hoy: " + new Date().toLocaleDateString("es-MX")
+      prompt += "\nPipeline Total: $" + (pipelineData.pipeline_generado_imr || 0).toLocaleString() + " MXN"
+      prompt += "\nDeals Abiertos: " + (pipelineData.deals_abiertos || 0)
+      prompt += "\nCierres Esta Semana: " + (pipelineData.cierres_esta_semana || 0)
+      prompt += "\nGanado Este Mes: $" + (pipelineData.ganado_imr_mes || 0).toLocaleString() + " MXN"
+      prompt += "\nObjetivo Mensual: $" + (pipelineData.objetivo_imr || 105000).toLocaleString() + " MXN"
+      
+      if (pipelineData.accion_inmediata && pipelineData.accion_inmediata.length > 0) {
+        prompt += "\n\n=== DEALS EN ACCION INMEDIATA (Requieren atencion urgente) ==="
+        pipelineData.accion_inmediata.forEach((deal, index) => {
+          prompt += "\n\n" + (index + 1) + ". " + deal.deal_title
+          prompt += "\n   Empresa: " + deal.org_name
+          prompt += "\n   Contacto: " + (deal.person_name || "No especificado")
+          prompt += "\n   Valor IMR: $" + (deal.value_imr || 0).toLocaleString() + " MXN"
+          if (deal.value_vtc) prompt += "\n   Valor VTC: $" + deal.value_vtc.toLocaleString() + " MXN"
+          prompt += "\n   Estado: " + deal.estado.toUpperCase()
+          prompt += "\n   Alerta: " + (deal.estado_mensaje || "Sin alerta especifica")
+          prompt += "\n   Fecha de Cierre: " + (deal.expected_close_date || "No definida")
+          prompt += "\n   Etapa: " + (deal.stage_name || "No especificada")
+          prompt += "\n   Probabilidad: " + (deal.probability || 0) + "%"
+          if (deal.next_activity_subject) {
+            prompt += "\n   Proxima Actividad: " + deal.next_activity_subject
+            if (deal.next_activity_date) prompt += " (" + deal.next_activity_date + ")"
+          } else {
+            prompt += "\n   Proxima Actividad: SIN ACTIVIDAD PROGRAMADA"
+          }
+        })
+      }
+      
+      if (pipelineData.proximos_cierres && pipelineData.proximos_cierres.length > 0) {
+        prompt += "\n\n=== PROXIMOS CIERRES (Deals cercanos a cerrar) ==="
+        pipelineData.proximos_cierres.forEach((deal, index) => {
+          prompt += "\n" + (index + 1) + ". " + deal.deal_title + " (" + deal.org_name + ") - $" + (deal.value_imr || 0).toLocaleString() + " - Cierre: " + deal.expected_close_date
+        })
+      }
+    }
+    
+    return prompt
+  }
+
   const handleSend = async () => {
     if (!input.trim()) return
 
@@ -62,16 +107,7 @@ export function ChatInterface({ pipelineData }: ChatInterfaceProps) {
         content: m.content,
       }))
 
-      let systemPrompt = SYSTEM_PROMPT_BASE
-      if (pipelineData && pipelineData.accion_inmediata) {
-        systemPrompt += "\n\nDATOS DEL PIPELINE:\n"
-        systemPrompt += "Pipeline Total: $" + (pipelineData.pipeline_generado_imr || 0) + "\n"
-        systemPrompt += "Deals Abiertos: " + (pipelineData.deals_abiertos || 0) + "\n"
-        pipelineData.accion_inmediata.slice(0, 5).forEach(d => {
-          systemPrompt += "- " + d.deal_title + " (" + d.org_name + ") - $" + (d.value_imr || 0) + " - " + d.estado + "\n"
-        })
-      }
-
+      const systemPrompt = buildSystemPrompt()
       const response = await sendChatMessage(input.trim(), history, systemPrompt, pipelineData)
 
       const assistantMessage: Message = {
