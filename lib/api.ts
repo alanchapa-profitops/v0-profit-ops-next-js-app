@@ -47,7 +47,23 @@ export async function fetchDashboardData(): Promise<DashboardData> {
     headers: { "Content-Type": "application/json" },
   });
   if (!response.ok) throw new Error("Error fetching dashboard");
-  return await response.json();
+  const data = await response.json();
+  
+  // Mapear la respuesta de n8n al formato esperado
+  // n8n devuelve: { metricas: {...}, accion_inmediata: [...] }
+  // Frontend espera los campos directamente
+  
+  const metricas = data.metricas || {};
+  
+  return {
+    pipeline_generado_imr: metricas.pipeline_generado_imr || 0,
+    deals_abiertos: metricas.deals_abiertos || 0,
+    cierres_esta_semana: metricas.cierres_esta_semana || 0,
+    objetivo_imr: metricas.objetivo_imr || 105000,
+    ganado_imr_mes: metricas.ganado_imr_mes || 0,
+    accion_inmediata: data.accion_inmediata || [],
+    proximos_cierres: data.proximos_cierres || [],
+  };
 }
 
 export async function sendChatMessage(
