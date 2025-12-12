@@ -1,108 +1,108 @@
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+"use client"
 
-interface Deal {
-  id: string
-  name: string
-  company: string
-  value: string
-  closeDate: string
-  status: "hot" | "cold" | "neutral"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { type Deal, formatCurrencyShort, getStatusColor } from "@/lib/api"
+import { RefreshCw } from "lucide-react"
+import { Button } from "@/components/ui/button"
+
+interface DealsListProps {
+  deals?: Deal[]
+  isLoading?: boolean
+  onRefresh?: () => void
 }
 
-const deals: Deal[] = [
-  {
-    id: "1",
-    name: "Sistema CRM Enterprise",
-    company: "TechCorp S.A.",
-    value: "$45,000",
-    closeDate: "15 Dic 2024",
-    status: "hot",
-  },
-  {
-    id: "2",
-    name: "Licencias SaaS Anuales",
-    company: "Innovate Inc.",
-    value: "$28,500",
-    closeDate: "20 Dic 2024",
-    status: "hot",
-  },
-  {
-    id: "3",
-    name: "Consultoría Digital",
-    company: "Global Solutions",
-    value: "$12,800",
-    closeDate: "30 Dic 2024",
-    status: "neutral",
-  },
-  {
-    id: "4",
-    name: "Integración API",
-    company: "StartupXYZ",
-    value: "$8,200",
-    closeDate: "10 Ene 2025",
-    status: "cold",
-  },
-  {
-    id: "5",
-    name: "Desarrollo Custom",
-    company: "Enterprise Co.",
-    value: "$65,000",
-    closeDate: "25 Ene 2025",
-    status: "hot",
-  },
-  {
-    id: "6",
-    name: "Soporte Premium",
-    company: "MidSize Corp",
-    value: "$15,400",
-    closeDate: "05 Feb 2025",
-    status: "neutral",
-  },
-]
-
-export function DealsList() {
-  const getStatusColor = (status: Deal["status"]) => {
-    switch (status) {
-      case "hot":
-        return "bg-green-500"
-      case "cold":
-        return "bg-red-500"
-      case "neutral":
-        return "bg-gray-500"
-      default:
-        return "bg-gray-500"
-    }
+export function DealsList({ deals, isLoading, onRefresh }: DealsListProps) {
+  if (isLoading) {
+    return (
+      <Card className="border-border bg-card">
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-foreground">Pipeline Activo</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div
+                key={i}
+                className="flex items-center gap-4 rounded-lg border border-border bg-muted/30 p-4 animate-pulse"
+              >
+                <div className="h-3 w-3 rounded-full bg-muted" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-48 bg-muted rounded" />
+                  <div className="h-3 w-32 bg-muted rounded" />
+                  <div className="h-3 w-24 bg-muted rounded" />
+                </div>
+                <div className="h-6 w-20 bg-muted rounded" />
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
     <Card className="border-border bg-card">
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between">
         <CardTitle className="text-foreground">Pipeline Activo</CardTitle>
+        {onRefresh && (
+          <Button variant="ghost" size="sm" onClick={onRefresh}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        )}
       </CardHeader>
       <CardContent>
-        <div className="space-y-3">
-          {deals.map((deal) => (
-            <div
-              key={deal.id}
-              className="flex items-center gap-4 rounded-lg border border-border bg-muted/30 p-4 transition-colors hover:bg-muted/50"
-            >
-              {/* Status indicator */}
-              <div className={`h-3 w-3 rounded-full ${getStatusColor(deal.status)}`} />
-
-              {/* Deal info */}
-              <div className="flex-1 space-y-1">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <p className="font-semibold text-foreground">{deal.name}</p>
-                    <p className="text-sm text-muted-foreground">{deal.company}</p>
+        {deals && deals.length > 0 ? (
+          <div className="space-y-3">
+            {deals.map((deal) => (
+              <div
+                key={deal.deal_id}
+                className="flex items-center gap-4 rounded-lg border border-border bg-muted/30 p-4 transition-colors hover:bg-muted/50"
+              >
+                <div className={`h-3 w-3 rounded-full ${getStatusColor(deal.estado)}`} />
+                <div className="flex-1 space-y-1">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <p className="font-semibold text-foreground">{deal.deal_title}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {deal.org_name} {deal.person_name && `• ${deal.person_name}`}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-primary">
+                        {formatCurrencyShort(deal.value_imr)}
+                      </p>
+                      {deal.value_vtc && deal.value_vtc !== deal.value_imr && (
+                        <p className="text-xs text-muted-foreground">
+                          VTC: {formatCurrencyShort(deal.value_vtc)}
+                        </p>
+                      )}
+                    </div>
                   </div>
-                  <p className="font-bold text-primary">{deal.value}</p>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      Cierre: {deal.expected_close_date}
+                    </span>
+                    {deal.next_activity_subject && (
+                      <span className={`${deal.estado === 'rojo' ? 'text-red-400' : 'text-muted-foreground'}`}>
+                        {deal.next_activity_subject}
+                        {deal.next_activity_date && ` • ${deal.next_activity_date}`}
+                      </span>
+                    )}
+                  </div>
+                  {deal.estado_mensaje && (
+                    <p className={`text-xs ${deal.estado === 'rojo' ? 'text-red-400' : 'text-muted-foreground'}`}>
+                      ⚠️ {deal.estado_mensaje}
+                    </p>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground">Cierre: {deal.closeDate}</p>
               </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex h-32 items-center justify-center text-muted-foreground">
+            No hay deals en el pipeline
+          </div>
+        )}
       </CardContent>
     </Card>
   )
