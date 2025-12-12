@@ -1,11 +1,22 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import { Card } from "@/components/ui/card"
-import { Send, Target, Plus } from "lucide-react"
-import { sendChatMessage, SYSTEM_PROMPT_BASE, type ChatMessage, type DashboardData } from "@/lib/api"
+import { Input } from "@/components/ui/input"
+import { Send, Target, Plus, Save, X } from "lucide-react"
+import { 
+  sendChatMessage, 
+  SYSTEM_PROMPT_BASE, 
+  saveConversation,
+  getConversation,
+  updateConversation,
+  type ChatMessage, 
+  type DashboardData,
+  type SavedMessage 
+} from "@/lib/api"
 
 interface Message {
   id: string
@@ -19,15 +30,39 @@ interface ChatInterfaceProps {
 }
 
 export function ChatInterface({ pipelineData }: ChatInterfaceProps) {
+  const router = useRouter()
+  const searchParams = useSearchParams()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState("")
   const [isTyping, setIsTyping] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [showSaveDialog, setShowSaveDialog] = useState(false)
+  const [conversationName, setConversationName] = useState("")
+  const [currentConversationId, setCurrentConversationId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     setMounted(true)
+    
+    // Verificar si hay una conversacion para cargar
+    const loadId = searchParams.get("load")
+    if (loadId) {
+      const saved = getConversation(loadId)
+      if (saved) {
+        setMessages(saved.mensajes.map(m => ({
+          id: m.id,
+          role: m.role,
+          content: m.content,
+          timestamp: m.timestamp,
+        })))
+        setCurrentConversationId(loadId)
+        setConversationName(saved.nombre)
+        return
+      }
+    }
+    
+    // Mensaje inicial por defecto
     setMessages([
       {
         id: "1",
@@ -36,7 +71,7 @@ export function ChatInterface({ pipelineData }: ChatInterfaceProps) {
         timestamp: new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
       },
     ])
-  }, [])
+  }, [searchParams])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" })
@@ -140,6 +175,29 @@ export function ChatInterface({ pipelineData }: ChatInterfaceProps) {
         timestamp: new Date().toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" }),
       },
     ])
+    setCurrentConversationId(null)
+    setConversationName("")
+    router.push("/coach")
+  }
+
+  const handleSaveConversation = () => {
+    if (!conversationName.trim()) return
+    
+    const savedMessages: SavedMessage[] = messages.map(m => ({
+      id: m.id,
+      role: m.role,
+      content: m.content,
+      timestamp: m.timestamp,
+    }))
+    
+    if (currentConversationId) {
+      updateConversation(currentConversationId, savedMessages)
+    } else {
+      const saved = saveConversation(conversationName.trim(), savedMessages)
+      setCurrentConversationId(saved.id)
+    }
+    
+    setShowSaveDialog(false)
   }
 
   if (!mounted) {
@@ -161,8 +219,12 @@ export function ChatInterface({ pipelineData }: ChatInterfaceProps) {
               <Target className="h-6 w-6 text-primary" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-foreground">Coach de Ventas B2B</h2>
-              <p className="text-sm text-muted-foreground">Asistente inteligente</p>
+              <h2 className="text-xl font-bold text-foreground">
+                {currentConversationId ? conversationName : "Coach de Ventas B2B"}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {currentConversationId ? "Conversacion guardada" : "Asistente inteligente"}
+              </p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -170,12 +232,40 @@ export function ChatInterface({ pipelineData }: ChatInterfaceProps) {
             <span className="text-sm text-muted-foreground">Activo</span>
           </div>
         </div>
-        <div className="mt-4">
+        <div className="mt-4 flex gap-2">
           <Button variant="outline" size="sm" onClick={handleNewConversation}>
             <Plus className="mr-2 h-4 w-4" />
-            Nueva conversacion
+            Nueva
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setShowSaveDialog(true)}>
+            <Save className="mr-2 h-4 w-4" />
+            {currentConversationId ? "Actualizar" : "Guardar"}
           </Button>
         </div>
+        
+        {showSaveDialog && (
+          <div className="mt-4 p-3 border border-border rounded-lg bg-muted/30">
+            <div className="flex items-center gap-2">
+              <Input
+                value={conversationName}
+                onChange={(e) => setConversationName(e.target.value)}
+                placeholder="Nombre de la conversacion..."
+                className="flex-1"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSaveConversation()
+                  if (e.key === "Escape") setShowSaveDialog(false)
+                }}
+                autoFocus
+              />
+              <Button size="sm" onClick={handleSaveConversation} disabled={!conversationName.trim()}>
+                Guardar
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowSaveDialog(false)}>
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto p-4">
