@@ -41,6 +41,23 @@ export interface ChatResponse {
   response: string;
 }
 
+export interface SavedMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: string;
+}
+
+export interface SavedConversation {
+  id: string;
+  nombre: string;
+  fecha: string;
+  mensajes: SavedMessage[];
+  preview: string;
+}
+
+// ============ API FUNCTIONS ============
+
 export async function fetchDashboardData(): Promise<DashboardData> {
   const response = await fetch(API_ENDPOINTS.dashboard, {
     method: "GET",
@@ -48,10 +65,6 @@ export async function fetchDashboardData(): Promise<DashboardData> {
   });
   if (!response.ok) throw new Error("Error fetching dashboard");
   const data = await response.json();
-  
-  // Mapear la respuesta de n8n al formato esperado
-  // n8n devuelve: { metricas: {...}, accion_inmediata: [...] }
-  // Frontend espera los campos directamente
   
   const metricas = data.metricas || {};
   
@@ -96,6 +109,63 @@ export async function sendChatMessage(
   return { response: responseText };
 }
 
+// ============ CONVERSATION STORAGE ============
+
+const STORAGE_KEY = "profitops-saved-conversations";
+
+export function getSavedConversations(): SavedConversation[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveConversation(nombre: string, mensajes: SavedMessage[]): SavedConversation {
+  const conversations = getSavedConversations();
+  
+  const newConversation: SavedConversation = {
+    id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
+    nombre,
+    fecha: new Date().toISOString(),
+    mensajes,
+    preview: mensajes.filter(m => m.role === "user")[0]?.content.substring(0, 100) || "Conversacion guardada",
+  };
+  
+  conversations.unshift(newConversation);
+  
+  // Mantener maximo 50 conversaciones
+  const trimmed = conversations.slice(0, 50);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed));
+  
+  return newConversation;
+}
+
+export function getConversation(id: string): SavedConversation | null {
+  const conversations = getSavedConversations();
+  return conversations.find(c => c.id === id) || null;
+}
+
+export function deleteConversation(id: string): void {
+  const conversations = getSavedConversations();
+  const filtered = conversations.filter(c => c.id !== id);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+}
+
+export function updateConversation(id: string, mensajes: SavedMessage[]): void {
+  const conversations = getSavedConversations();
+  const index = conversations.findIndex(c => c.id === id);
+  if (index !== -1) {
+    conversations[index].mensajes = mensajes;
+    conversations[index].fecha = new Date().toISOString();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(conversations));
+  }
+}
+
+// ============ UTILITY FUNCTIONS ============
+
 export function formatCurrency(value: number): string {
   return new Intl.NumberFormat("es-MX", {
     style: "currency",
@@ -118,6 +188,17 @@ export function getStatusColor(estado: Deal["estado"]): string {
     case "gris": return "bg-gray-500";
     default: return "bg-gray-500";
   }
+}
+
+export function formatDate(isoString: string): string {
+  const date = new Date(isoString);
+  return date.toLocaleDateString("es-MX", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export const SYSTEM_PROMPT_BASE = "Eres el Coach de Ventas B2B de Alan Chapa, Director Comercial de Catalyst Group. Tu rol es ayudarle a analizar su pipeline, priorizar deals, preparar estrategias para llamadas y reuniones, e identificar riesgos y oportunidades. Se directo y accionable. Usa datos especificos del pipeline cuando los tengas.";
