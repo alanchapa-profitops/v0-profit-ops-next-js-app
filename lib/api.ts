@@ -1,6 +1,3 @@
-// ProfitOps API Configuration
-// Conecta el frontend con los webhooks de n8n
-
 const N8N_BASE_URL = "https://profitops.app.n8n.cloud";
 
 export const API_ENDPOINTS = {
@@ -9,7 +6,6 @@ export const API_ENDPOINTS = {
   crm: `${N8N_BASE_URL}/webhook/profitops-crm`,
 };
 
-// Types
 export interface Deal {
   deal_id: number;
   deal_title: string;
@@ -41,40 +37,17 @@ export interface ChatMessage {
   content: string;
 }
 
-export interface ChatRequest {
-  message: string;
-  history: ChatMessage[];
-  system: string;
-  pipelineData?: DashboardData;
-}
-
 export interface ChatResponse {
   response: string;
-  tool_used?: boolean;
-  tool_result?: any;
 }
 
-// API Functions
-
 export async function fetchDashboardData(): Promise<DashboardData> {
-  try {
-    const response = await fetch(API_ENDPOINTS.dashboard, {
-      method: "GET",
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Error fetching dashboard: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error("Error fetching dashboard data:", error);
-    throw error;
-  }
+  const response = await fetch(API_ENDPOINTS.dashboard, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!response.ok) throw new Error("Error fetching dashboard");
+  return await response.json();
 }
 
 export async function sendChatMessage(
@@ -83,30 +56,28 @@ export async function sendChatMessage(
   systemPrompt: string,
   pipelineData?: DashboardData
 ): Promise<ChatResponse> {
-  try {
-    const response = await fetch(API_ENDPOINTS.chat, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        message,
-        history,
-        system: systemPrompt,
-        pipelineData,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Error sending chat: ${response.status}`);
-    }
-
-    const data = await response.json();
-    return data;
-  } catch (error) {
-    console.error("Error sending chat message:", error);
-    throw error;
+  const response = await fetch(API_ENDPOINTS.chat, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      message,
+      history,
+      system: systemPrompt,
+      pipelineData,
+    }),
+  });
+  if (!response.ok) throw new Error("Error sending chat");
+  const data = await response.json();
+  
+  let responseText = "";
+  if (data.content && data.content[0] && data.content[0].text) {
+    responseText = data.content[0].text;
+  } else if (data.response) {
+    responseText = data.response;
+  } else if (typeof data === "string") {
+    responseText = data;
   }
+  return { response: responseText };
 }
 
 export function formatCurrency(value: number): string {
@@ -119,26 +90,18 @@ export function formatCurrency(value: number): string {
 }
 
 export function formatCurrencyShort(value: number): string {
-  if (value >= 1000000) {
-    return `$${(value / 1000000).toFixed(1)}M`;
-  }
-  if (value >= 1000) {
-    return `$${Math.round(value / 1000)}K`;
-  }
-  return `$${value}`;
+  if (value >= 1000000) return "$" + (value / 1000000).toFixed(1) + "M";
+  if (value >= 1000) return "$" + Math.round(value / 1000) + "K";
+  return "$" + value;
 }
 
 export function getStatusColor(estado: Deal["estado"]): string {
   switch (estado) {
-    case "rojo":
-      return "bg-red-500";
-    case "verde":
-      return "bg-green-500";
-    case "gris":
-      return "bg-gray-500";
-    default:
-      return "bg-gray-500";
+    case "rojo": return "bg-red-500";
+    case "verde": return "bg-green-500";
+    case "gris": return "bg-gray-500";
+    default: return "bg-gray-500";
   }
 }
 
-export const SYSTEM_PROMPT_BASE = "Eres el Coach de Ventas B2B de Alan Chapa, Director Comercial de Catalyst Group.\n\nTu rol es ayudarle a:\n1. Analizar su pipeline y priorizar deals\n2. Preparar estrategias para llamadas y reuniones\n3. Identificar riesgos y oportunidades en su cartera\n4. Dar coaching basado en metodologias SPIN, Challenger Sale, MEDDIC y Sandler\n\nCaracteristicas de tu comunicacion:\n- Se directo y accionable\n- Usa datos especificos del pipeline cuando los tengas\n- Haz preguntas que generen reflexion\n- Celebra los avances y manten el momentum\n\nContexto del usuario:\n- Alan tiene 10+ anos de experiencia en BD (Dropbox, Rubrik, Canonical)\n- Catalyst Group genera ~$900K MXN/mes con servicios de marketing B2B\n- Su objetivo es escalar de $245K a $400K MXN/mes para octubre 2025\n- Pipeline actual: Catalyst - Prospectos (pipeline_id: 5)";
+export const SYSTEM_PROMPT_BASE = "Eres el Coach de Ventas B2B de Alan Chapa, Director Comercial de Catalyst Group. Tu rol es ayudarle a analizar su pipeline, priorizar deals, preparar estrategias para llamadas y reuniones, e identificar riesgos y oportunidades. Se directo y accionable. Usa datos especificos del pipeline cuando los tengas.";
